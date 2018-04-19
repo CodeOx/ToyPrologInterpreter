@@ -130,10 +130,10 @@ let rec eval unifierList currentUnif originalProg prog goal = match goal with
 		(match prog with
 		| [] -> unifierList
 		| (Fact f)::p1 -> (let substituted_fact = subst_atom currentUnif f in
-			try (eval [] (mgu_atoms substituted_atomic_goal substituted_fact) originalProg originalProg (Goal xs))@(eval [] currentUnif p1 p1 goal)@unifierList
+			try (eval [] (mgu_atoms substituted_atomic_goal substituted_fact) originalProg originalProg (Goal xs))@(eval [] currentUnif originalProg p1 goal)@unifierList
 			with NOT_UNIFIABLE -> (eval [] currentUnif originalProg p1 goal ))@unifierList
 		| (Rule (r,l))::p1 -> (let substituted_fact = subst_atom currentUnif r in
-			try (eval [] (mgu_atoms substituted_atomic_goal substituted_fact) originalProg originalProg (Goal (l@xs)))@(eval [] currentUnif p1 p1 goal)@unifierList
+			try (eval [] (mgu_atoms substituted_atomic_goal substituted_fact) originalProg originalProg (Goal (l@xs)))@(eval [] currentUnif originalProg p1 goal)@unifierList
 			with NOT_UNIFIABLE -> (eval [] currentUnif originalProg p1 goal)@unifierList ))
 
 (*  unifierList contains list of all solutions found so far
@@ -145,9 +145,15 @@ let rec eval unifierList currentUnif originalProg prog goal = match goal with
  *)
 
 (* eval takes a program and a goal and gives the first solution to the goal *)
+
+let eval_wrapper program goal = eval [] [] program program goal
+
+(* eval_wrapper is a wrapper for the eval function *)
 ;;
 
 let p = [Fact(Atom("edge",[Node("a",[]);Node("b",[])])); Fact(Atom("edge",[Node("a",[]);Node("c",[])])); Fact(Atom("path",[Var ("x"); Var("x")])); Rule(Atom("path",[Var ("x"); Var("y")]),[Atom("edge",[Var("x"); Var("y")])])];;
 let g1 = Goal [Atom("edge",[Node("a",[]); Var("x")])];;
 let g2 = Goal [Atom("path",[Node("b",[]); Var("x")])];;
 let g3 = Goal [Atom("path",[Node("a",[]); Node("b",[])])];;
+let g4 = Goal [Atom("edge",[Var("y"); Var("x")])];;
+let g5 = Goal [Atom("path",[Var("x");Node("b",[])])];;
