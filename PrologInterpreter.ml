@@ -124,17 +124,25 @@ let rec subst_atom s atom = match atom with
 
 (* subst_atom takes a substitution s and an atom and applies the Unique Homomorphic Extension of s to atom *)
 
-let rec eval currentUnif originalProg prog goal = match goal with
-	| Goal [] -> currentUnif
+let rec eval unifierList currentUnif originalProg prog goal = match goal with
+	| Goal [] -> currentUnif::unifierList
 	| Goal (x::xs) -> let substituted_atomic_goal = subst_atom currentUnif x in
 		(match prog with
-		| [] -> raise FAIL
+		| [] -> unifierList
 		| (Fact f)::p1 -> (let substituted_fact = subst_atom currentUnif f in
-			try eval (mgu_atoms substituted_atomic_goal substituted_fact) originalProg originalProg (Goal xs)
-			with NOT_UNIFIABLE -> eval currentUnif originalProg p1 goal ) 
+			try (eval [] (mgu_atoms substituted_atomic_goal substituted_fact) originalProg originalProg (Goal xs))@(eval [] currentUnif p1 p1 goal)@unifierList
+			with NOT_UNIFIABLE -> (eval [] currentUnif originalProg p1 goal ))@unifierList
 		| (Rule (r,l))::p1 -> (let substituted_fact = subst_atom currentUnif r in
-			try eval (mgu_atoms substituted_atomic_goal substituted_fact) originalProg originalProg (Goal (l@xs))
-			with NOT_UNIFIABLE -> eval currentUnif originalProg p1 goal ))
+			try (eval [] (mgu_atoms substituted_atomic_goal substituted_fact) originalProg originalProg (Goal (l@xs)))@(eval [] currentUnif p1 p1 goal)@unifierList
+			with NOT_UNIFIABLE -> (eval [] currentUnif originalProg p1 goal)@unifierList ))
+
+(*  unifierList contains list of all solutions found so far
+	currentUnif is the current Solution used in recursion
+	originalProg is the program to begin with
+	prog is the current program in the recursion
+	originalGoal is the goal to begin with
+	goal is all the remaining goals in recursion
+ *)
 
 (* eval takes a program and a goal and gives the first solution to the goal *)
 ;;
