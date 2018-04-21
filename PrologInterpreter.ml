@@ -4,7 +4,7 @@ exception False
 
 type term = Var of string | Node of string*(term list)	(* a constant is a zero-ary function symbol *)
 
-type atom = Atom of string * (term list) | Cut
+type atom = Atom of string * (term list) | Cut | Fail
 
 type clause = Fact of atom | Rule of atom*(atom list)
 
@@ -126,39 +126,33 @@ let rec subst_atom s atom = match atom with
 
 (* subst_atom takes a substitution s and an atom and applies the Unique Homomorphic Extension of s to atom *)
 
-let rec eval currentUnif originalProg prog goal = match goal with
-	| Goal [] -> [currentUnif]
+let rec eval originalProg stack = match stack with
+	| [] -> []
+	| (currentUnif,prog,goal)::s1 -> (match goal with
+		
+		| Goal [] -> [currentUnif]@(eval originalProg s1)
 
-	| Goal (Cut::xs) -> (match prog with
-		| [] -> []
-		| p::p1 -> (eval currentUnif originalProg originalProg (Goal xs))
-		)
-
-	| Goal (x::xs) -> if (listContains (x::xs) Cut) then
-		(let substituted_atomic_goal = subst_atom currentUnif x in
-			(match prog with
+(* 		| Goal (Cut::xs) -> (match prog with
 			| [] -> []
-			| (Fact f)::p1 -> (let substituted_fact = subst_atom currentUnif f in
-				try (eval (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal xs))
-				with NOT_UNIFIABLE -> (eval currentUnif originalProg p1 goal ))
-			| (Rule (r,l))::p1 -> (let substituted_fact = subst_atom currentUnif r in
-				try (eval (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal (l@xs)))
-				with NOT_UNIFIABLE -> (eval currentUnif originalProg p1 goal) ))
-		)
-		else
-		(let substituted_atomic_goal = subst_atom currentUnif x in
-			(match prog with
-			| [] -> []
-			| (Fact f)::p1 -> (let substituted_fact = subst_atom currentUnif f in
-				try (eval (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal xs))@(eval currentUnif originalProg p1 goal)
-				with NOT_UNIFIABLE -> (eval currentUnif originalProg p1 goal ))
-			| (Rule (r,l))::p1 -> (let substituted_fact = subst_atom currentUnif r in
-				try (eval (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal (l@xs)))@(eval currentUnif originalProg p1 goal)
-				with NOT_UNIFIABLE -> (eval currentUnif originalProg p1 goal) ))
-		)
+			| p::p1 -> (eval currentUnif originalProg ((originalProg,(Goal xs))::s1))
+			) *)
 
-(*  unifierList contains list of all solutions found so far
-	currentUnif is the current Solution used in recursion
+		| Goal (Fail::xs) -> raise NOT_UNIFIABLE
+
+		| Goal (x::xs) -> (let substituted_atomic_goal = subst_atom currentUnif x in
+				(match prog with
+				| [] -> (eval originalProg s1)
+				| (Fact f)::p1 -> (let substituted_fact = subst_atom currentUnif f in
+					try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) , originalProg , (Goal xs))::(currentUnif,p1,goal)::s1))
+					with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
+				| (Rule (r,l))::p1 -> (let substituted_fact = subst_atom currentUnif r in
+					try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::s1))
+					with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
+			)
+		)
+	)
+
+(*  currentUnif is the current Solution used in recursion
 	originalProg is the program to begin with
 	prog is the current program in the recursion
 	originalGoal is the goal to begin with
@@ -167,7 +161,7 @@ let rec eval currentUnif originalProg prog goal = match goal with
 
 (* eval takes a program and a goal and gives the solutiona to the goal *)
 
-let eval_wrapper program goal = eval [] program program goal
+let eval_wrapper program goal = (eval program [([],program,goal)])
 
 (* eval_wrapper is a wrapper for the eval function *)
 ;;
@@ -214,3 +208,6 @@ let p2 = [Rule(Atom("s",[Var("x");Var("y")]),[Atom("q",[Var("x");Var("y")])]);
 		Fact(Atom("j",[Node("3",[])]))
 		];;
 let g1 = Goal [Atom("s",[Var("x");Var("y")])];;
+
+
+(* expressions, failure of original goal, remove mapping of variables not in original goal, true for original goal *)
