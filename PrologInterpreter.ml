@@ -126,35 +126,35 @@ let rec subst_atom s atom = match atom with
 
 (* subst_atom takes a substitution s and an atom and applies the Unique Homomorphic Extension of s to atom *)
 
-let rec eval unifierList currentUnif originalProg prog goal = match goal with
-	| Goal [] -> currentUnif::unifierList
+let rec eval currentUnif originalProg prog goal = match goal with
+	| Goal [] -> [currentUnif]
 
 	| Goal (Cut::xs) -> (match prog with
-		| [] -> unifierList
-		| p::p1 -> (eval [] currentUnif originalProg originalProg (Goal xs))@unifierList
+		| [] -> []
+		| p::p1 -> (eval currentUnif originalProg originalProg (Goal xs))
 		)
 
 	| Goal (x::xs) -> if (listContains (x::xs) Cut) then
 		(let substituted_atomic_goal = subst_atom currentUnif x in
 			(match prog with
-			| [] -> unifierList
+			| [] -> []
 			| (Fact f)::p1 -> (let substituted_fact = subst_atom currentUnif f in
-				try (eval [] (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal xs))@unifierList
-				with NOT_UNIFIABLE -> (eval [] currentUnif originalProg p1 goal ))@unifierList
+				try (eval (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal xs))
+				with NOT_UNIFIABLE -> (eval currentUnif originalProg p1 goal ))
 			| (Rule (r,l))::p1 -> (let substituted_fact = subst_atom currentUnif r in
-				try (eval [] (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal (l@xs)))@unifierList
-				with NOT_UNIFIABLE -> (eval [] currentUnif originalProg p1 goal)@unifierList ))
+				try (eval (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal (l@xs)))
+				with NOT_UNIFIABLE -> (eval currentUnif originalProg p1 goal) ))
 		)
 		else
 		(let substituted_atomic_goal = subst_atom currentUnif x in
 			(match prog with
-			| [] -> unifierList
+			| [] -> []
 			| (Fact f)::p1 -> (let substituted_fact = subst_atom currentUnif f in
-				try (eval [] (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal xs))@(eval [] currentUnif originalProg p1 goal)@unifierList
-				with NOT_UNIFIABLE -> (eval [] currentUnif originalProg p1 goal ))@unifierList
+				try (eval (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal xs))@(eval currentUnif originalProg p1 goal)
+				with NOT_UNIFIABLE -> (eval currentUnif originalProg p1 goal ))
 			| (Rule (r,l))::p1 -> (let substituted_fact = subst_atom currentUnif r in
-				try (eval [] (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal (l@xs)))@(eval [] currentUnif originalProg p1 goal)@unifierList
-				with NOT_UNIFIABLE -> (eval [] currentUnif originalProg p1 goal)@unifierList ))
+				try (eval (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal (l@xs)))@(eval currentUnif originalProg p1 goal)
+				with NOT_UNIFIABLE -> (eval currentUnif originalProg p1 goal) ))
 		)
 
 (*  unifierList contains list of all solutions found so far
@@ -167,7 +167,7 @@ let rec eval unifierList currentUnif originalProg prog goal = match goal with
 
 (* eval takes a program and a goal and gives the solutiona to the goal *)
 
-let eval_wrapper program goal = eval [] [] program program goal
+let eval_wrapper program goal = eval [] program program goal
 
 (* eval_wrapper is a wrapper for the eval function *)
 ;;
