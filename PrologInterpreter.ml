@@ -1,10 +1,10 @@
 exception Error
 exception NOT_UNIFIABLE
-exception FAIL
+exception False
 
 type term = Var of string | Node of string*(term list)	(* a constant is a zero-ary function symbol *)
 
-type atom = Atom of string * (term list)
+type atom = Atom of string * (term list) | Cut
 
 type clause = Fact of atom | Rule of atom*(atom list)
 
@@ -118,22 +118,30 @@ let rec mgu subsList t1 t2 = match (t1,t2) with
 
 let mgu_atoms a1 a2 = match (a1,a2) with
 	| (Atom (x1,y1),Atom (x2,y2)) -> mgu [] (Node (x1,y1)) (Node (x2,y2))
+	| _ -> raise Error
 
 let rec subst_atom s atom = match atom with
 	| Atom (a,b) -> Atom (a, (List.map (subst s) b))
+	| _ -> raise Error
 
 (* subst_atom takes a substitution s and an atom and applies the Unique Homomorphic Extension of s to atom *)
 
 let rec eval unifierList currentUnif originalProg prog goal = match goal with
 	| Goal [] -> currentUnif::unifierList
+
+	| Goal (Cut::xs) -> (match prog with
+		| [] -> unifierList
+		| p::p1 -> (eval [] currentUnif originalProg originalProg (Goal xs))@unifierList
+		)
+
 	| Goal (x::xs) -> let substituted_atomic_goal = subst_atom currentUnif x in
 		(match prog with
 		| [] -> unifierList
 		| (Fact f)::p1 -> (let substituted_fact = subst_atom currentUnif f in
-			try (eval [] (mgu_atoms substituted_atomic_goal substituted_fact) originalProg originalProg (Goal xs))@(eval [] currentUnif originalProg p1 goal)@unifierList
+			try (eval [] (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal xs))@(eval [] currentUnif originalProg p1 goal)@unifierList
 			with NOT_UNIFIABLE -> (eval [] currentUnif originalProg p1 goal ))@unifierList
 		| (Rule (r,l))::p1 -> (let substituted_fact = subst_atom currentUnif r in
-			try (eval [] (mgu_atoms substituted_atomic_goal substituted_fact) originalProg originalProg (Goal (l@xs)))@(eval [] currentUnif originalProg p1 goal)@unifierList
+			try (eval [] (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) originalProg originalProg (Goal (l@xs)))@(eval [] currentUnif originalProg p1 goal)@unifierList
 			with NOT_UNIFIABLE -> (eval [] currentUnif originalProg p1 goal)@unifierList ))
 
 (*  unifierList contains list of all solutions found so far
@@ -150,6 +158,8 @@ let eval_wrapper program goal = eval [] [] program program goal
 
 (* eval_wrapper is a wrapper for the eval function *)
 ;;
+
+
 (* graph example *)
 let p = [Fact(Atom("edge",[Node("a",[]);Node("b",[])])); Fact(Atom("edge",[Node("a",[]);Node("c",[])])); Fact(Atom("path",[Var ("x"); Var("x")])); Rule(Atom("path",[Var ("x"); Var("y")]),[Atom("edge",[Var("x"); Var("y")])])];;
 let g1 = Goal [Atom("edge",[Node("a",[]); Var("x")])];;
@@ -159,4 +169,35 @@ let g4 = Goal [Atom("edge",[Var("x"); Var("y")])];;
 let g5 = Goal [Atom("path",[Var("x");Var("y")])];;
 
 
-(* member example *)
+(* cut example *)
+(* 
+s(X,Y) :- q(X,Y).
+s(0,0).
+ 
+q(X,Y) :- i(X),!,j(Y).
+ 
+i(1).
+i(2).
+j(1).
+j(2).
+j(3).
+ *)
+let p1 = [Rule(Atom("s",[Var("x");Var("y")]),[Atom("q",[Var("x");Var("y")])]);
+		Fact(Atom("s",[Node("0",[]);Node("0",[])]));
+		Rule(Atom("q",[Var("x");Var("y")]),[Atom("i",[Var("x")]);Cut;Atom("j",[Var("y")])]);
+		Fact(Atom("i",[Node("1",[])]));
+		Fact(Atom("i",[Node("2",[])]));
+		Fact(Atom("j",[Node("1",[])]));
+		Fact(Atom("j",[Node("2",[])]));
+		Fact(Atom("j",[Node("3",[])]))
+		];;
+let p2 = [Rule(Atom("s",[Var("x");Var("y")]),[Atom("q",[Var("x");Var("y")])]);
+		Fact(Atom("s",[Node("0",[]);Node("0",[])]));
+		Rule(Atom("q",[Var("x");Var("y")]),[Atom("i",[Var("x")]);Atom("j",[Var("y")])]);
+		Fact(Atom("i",[Node("1",[])]));
+		Fact(Atom("i",[Node("2",[])]));
+		Fact(Atom("j",[Node("1",[])]));
+		Fact(Atom("j",[Node("2",[])]));
+		Fact(Atom("j",[Node("3",[])]))
+		];;
+let g1 = Goal [Atom("s",[Var("x");Var("y")])];;
