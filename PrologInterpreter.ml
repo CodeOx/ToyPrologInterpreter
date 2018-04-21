@@ -10,7 +10,7 @@ type clause = Fact of atom | Rule of atom*(atom list)
 
 type program = clause list
 
-type goal = Goal of atom list
+type goal = Goal of atom list | CutMarker
 
 
 let id x = x  
@@ -126,16 +126,20 @@ let rec subst_atom s atom = match atom with
 
 (* subst_atom takes a substitution s and an atom and applies the Unique Homomorphic Extension of s to atom *)
 
+let rec popStackTillCutmarker s = match s with
+	| [] -> []
+	| (_,_,CutMarker)::s1 -> s1
+	| s0::s1 -> popStackTillCutmarker s1
+
 let rec eval originalProg stack = match stack with
 	| [] -> []
 	| (currentUnif,prog,goal)::s1 -> (match goal with
 		
 		| Goal [] -> [currentUnif]@(eval originalProg s1)
 
-(* 		| Goal (Cut::xs) -> (match prog with
-			| [] -> []
-			| p::p1 -> (eval currentUnif originalProg ((originalProg,(Goal xs))::s1))
-			) *)
+		| CutMarker -> [currentUnif]@(eval originalProg s1)
+
+		| Goal (Cut::xs) -> eval originalProg ((currentUnif,prog,Goal(xs))::(popStackTillCutmarker s1))
 
 		| Goal (Fail::xs) -> raise NOT_UNIFIABLE
 
@@ -145,12 +149,21 @@ let rec eval originalProg stack = match stack with
 				| (Fact f)::p1 -> (let substituted_fact = subst_atom currentUnif f in
 					try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) , originalProg , (Goal xs))::(currentUnif,p1,goal)::s1))
 					with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
-				| (Rule (r,l))::p1 -> (let substituted_fact = subst_atom currentUnif r in
-					try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::s1))
-					with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
+				| (Rule (r,l))::p1 -> if (listContains l Cut) then
+
+						(let substituted_fact = subst_atom currentUnif r in
+						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::s1))
+						with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
+
+					else
+
+						(let substituted_fact = subst_atom currentUnif r in
+						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) , originalProg , (Goal (l@xs)))::([],[],CutMarker)::(currentUnif,p1,goal)::s1))
+						with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
+
+				)
 			)
 		)
-	)
 
 (*  currentUnif is the current Solution used in recursion
 	originalProg is the program to begin with
