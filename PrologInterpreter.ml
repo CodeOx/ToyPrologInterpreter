@@ -246,3 +246,30 @@ let p2 = [Rule(Atom("s",[Var("x");Var("y")]),[Atom("q",[Var("x");Var("y")])]);
 		];;
 let g1 = Goal [Atom("s",[Var("x");Var("y")])];;
 
+(* forced fail example *)
+(* 
+enjoys(v,X) :- big_kahuna_burger(X),!,fail.
+enjoys(v,X) :- burger(X).
+ 
+burger(X) :- big_mac(X).
+burger(X) :- big_kahuna_burger(X).
+ 
+big_mac(a).
+big_kahuna_burger(b).
+big_mac(c).
+
+?- enjoys(v,a).
+?- enjoys(v,b).
+ *)
+
+let p3 = [Rule(Atom("enjoys",[Node("v",[]);Var("x")]),[Atom("big_kahuna_burger",[Var("x")]);Cut;Fail]);
+		Rule(Atom("enjoys",[Node("v",[]);Var("x")]),[Atom("burger",[Var("x")])]);
+		Rule(Atom("burger",[Var("x")]),[Atom("big_mac",[Var("x")])]);
+		Rule(Atom("burger",[Var("x")]),[Atom("big_kahuna_burger",[Var("x")])]);
+		Fact(Atom("big_mac",[Node("a",[])]));
+		Fact(Atom("big_mac",[Node("c",[])]));
+		Fact(Atom("big_kahuna_burger",[Node("c",[])]))
+		]
+
+let g6 = Goal [Atom("enjoys",[Node("v",[]);Node("a",[])])];;
+let g7 = Goal [Atom("enjoys",[Node("v",[]);Node("b",[])])];;
