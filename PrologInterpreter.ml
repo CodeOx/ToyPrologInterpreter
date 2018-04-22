@@ -174,13 +174,13 @@ let rec eval originalProg stack = match stack with
 				| (Rule (r,l))::p1 -> if (listContains l Cut) then
 
 						(let substituted_fact = subst_atom currentUnif r in
-						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::s1))
+						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::([],[],CutMarker)::s1))
 						with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
 
 					else
 
 						(let substituted_fact = subst_atom currentUnif r in
-						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::([],[],CutMarker)::s1))
+						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::s1))
 						with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
 
 				)
