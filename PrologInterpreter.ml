@@ -56,6 +56,20 @@ let rec vars vlist term = match term with
 
 (* vars gives the set of variables in a well formed term *)
 
+let rec vars_atom atom = match atom with
+	| Atom (a,b) -> let c = (List.map (vars []) b) in (
+		List.fold_left union [] c
+	)
+	| _ -> raise Error
+
+(* vars_atom gives the set of varialbes in an Atom *)
+
+let rec vars_goal goal = match goal with
+	| Goal a ->	let c = (List.map (vars_atom) a) in (
+		List.fold_left union [] c
+	)
+	| _ -> raise Error
+
 (* substitutions are represented as list of pairs of variables and terms, representing the mapping of the variable to the corresponding term *)
 (* composition of substitutions are represented as list of substitutions with first element of list (first substitution) applied first *)
 
@@ -126,6 +140,14 @@ let rec subst_atom s atom = match atom with
 
 (* subst_atom takes a substitution s and an atom and applies the Unique Homomorphic Extension of s to atom *)
 
+let rec removeVarsNotInGoalUnif varsGoal unifier = match unifier with
+	| [] -> []
+	| (a,b)::u1 -> if (listContains varsGoal a) then (a,b)::(removeVarsNotInGoalUnif varsGoal u1) else (removeVarsNotInGoalUnif varsGoal u1)
+
+let rec removeVarsNotInGoal varsGoal unifierList = List.map (removeVarsNotInGoalUnif varsGoal) unifierList
+
+(* remove vars removes extra variables not in the original goal but may have been created internally in the eval function (see eval_wrapper p g3;;)  *)
+
 let rec popStackTillCutmarker s = match s with
 	| [] -> []
 	| (_,_,CutMarker)::s1 -> s1
@@ -147,18 +169,18 @@ let rec eval originalProg stack = match stack with
 				(match prog with
 				| [] -> (eval originalProg s1)
 				| (Fact f)::p1 -> (let substituted_fact = subst_atom currentUnif f in
-					try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) , originalProg , (Goal xs))::(currentUnif,p1,goal)::s1))
+					try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal xs))::(currentUnif,p1,goal)::s1))
 					with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
 				| (Rule (r,l))::p1 -> if (listContains l Cut) then
 
 						(let substituted_fact = subst_atom currentUnif r in
-						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::s1))
+						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::s1))
 						with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
 
 					else
 
 						(let substituted_fact = subst_atom currentUnif r in
-						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_atomic_goal substituted_fact)) , originalProg , (Goal (l@xs)))::([],[],CutMarker)::(currentUnif,p1,goal)::s1))
+						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::([],[],CutMarker)::s1))
 						with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
 
 				)
@@ -174,9 +196,11 @@ let rec eval originalProg stack = match stack with
 
 (* eval takes a program and a goal and gives the solutiona to the goal *)
 
-let eval_wrapper program goal = (eval program [([],program,goal)])
+let eval_wrapper program goal = removeVarsNotInGoal (vars_goal goal) (eval program [([],program,goal)])
 
 (* eval_wrapper is a wrapper for the eval function *)
+
+(* expressions, failure of original goal, remove mapping of variables not in original goal, true for original goal *)
 ;;
 
 
@@ -222,5 +246,3 @@ let p2 = [Rule(Atom("s",[Var("x");Var("y")]),[Atom("q",[Var("x");Var("y")])]);
 		];;
 let g1 = Goal [Atom("s",[Var("x");Var("y")])];;
 
-
-(* expressions, failure of original goal, remove mapping of variables not in original goal, true for original goal *)
