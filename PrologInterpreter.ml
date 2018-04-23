@@ -137,9 +137,21 @@ let mgu_atoms a1 a2 = match (a1,a2) with
 
 let rec subst_atom s atom = match atom with
 	| Atom (a,b) -> Atom (a, (List.map (subst s) b))
-	| _ -> raise Error
+	| Cut -> Cut
+	| Fail -> Fail
 
 (* subst_atom takes a substitution s and an atom and applies the Unique Homomorphic Extension of s to atom *)
+
+let rec subst_atom_fact_getSubstitution unifier vars_fact i= match vars_fact with
+	| [] -> []
+	| x::xs -> if (pairListContains unifier x) then 
+		(let a = Var("variable" ^ (string_of_int i)) in 
+			if (pairListContains unifier a) then subst_atom_fact_getSubstitution unifier vars_fact (i+1) else
+			(x,a)::(subst_atom_fact_getSubstitution unifier xs (i+1))
+		)
+	else (subst_atom_fact_getSubstitution unifier xs i)
+
+(* subst_atom_fact takes a fact and replaces its variables to variables not in unifier *)
 
 let rec removeVarsNotInGoalUnif varsGoal unifier = match unifier with
 	| [] -> []
@@ -174,21 +186,27 @@ let rec eval originalProg stack flag= match stack with
 		| Goal (x::xs) -> (let substituted_atomic_goal = subst_atom currentUnif x in
 				(match prog with
 				| [] -> (eval originalProg s1 flag)
-				| (Fact f)::p1 -> (let substituted_fact = subst_atom currentUnif f in
+				| (Fact f)::p1 -> (let substituted_fact = subst_atom (subst_atom_fact_getSubstitution currentUnif (vars_atom f) 1) f in
 					try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal xs))::(currentUnif,p1,goal)::s1) flag)
 					with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) flag))
-				| (Rule (r,l))::p1 -> if (listContains l Cut) then
+				| (Rule (r,l))::p1 -> let s = (subst_atom_fact_getSubstitution currentUnif (vars_atom r) 1) in
+
+					(if (listContains l Cut) then
 
 						(let substituted_fact = subst_atom currentUnif r in
-						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::([],[],CutMarker)::s1) flag)
-						with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) flag))
+							let subst_l = List.map (subst_atom s) l in
+								try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (subst_l@xs)))::(currentUnif,p1,goal)::([],[],CutMarker)::s1) flag)
+								with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) flag)
+						)
 
 					else
 
-						(let substituted_fact = subst_atom currentUnif r in
-						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::s1) flag)
-						with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) flag))
-
+						(let substituted_fact = subst_atom s r in 
+							let subst_l = List.map (subst_atom s) l in
+								try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (subst_l@xs)))::(currentUnif,p1,goal)::s1) flag)
+								with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) flag)
+						)
+					)
 				)
 			)
 		)
@@ -222,7 +240,7 @@ let p1 = [Fact(Atom("edge",[Node("a",[]);Node("b",[])])); Fact(Atom("edge",[Node
 		Rule(Atom("path",[Var ("x"); Var("y")]),[Atom("path",[Var("x"); Var("z")]);Atom("edge",[Var("z"); Var("y")])])
 		];;
 let p2 = [Fact(Atom("edge",[Node("a",[]);Node("b",[])])); Fact(Atom("edge",[Node("a",[]);Node("c",[])])); 
-		Fact(Atom("path",[Var ("t"); Var("t")])); 
+		Fact(Atom("path",[Var ("x"); Var("x")])); 
 		Rule(Atom("path",[Var ("x"); Var("y")]),[Atom("edge",[Var("x"); Var("z")]);Atom("path",[Var("z"); Var("y")])])
 		];;
 let g1 = Goal [Atom("edge",[Node("a",[]); Var("x")])];;
@@ -263,7 +281,7 @@ let p4 = [Rule(Atom("s",[Var("x");Var("y")]),[Atom("q",[Var("x");Var("y")])]);
 		Fact(Atom("j",[Node("2",[])]));
 		Fact(Atom("j",[Node("3",[])]))
 		];;
-let g6 = Goal [Atom("s",[Var("x");Var("y")])];;
+let g8 = Goal [Atom("s",[Var("x");Var("y")])];;
 
 (* forced fail example *)
 (* 
@@ -281,7 +299,7 @@ big_mac(c).
 ?- enjoys(v,b).
  *)
 
-let p3 = [Rule(Atom("enjoys",[Node("v",[]);Var("x")]),[Atom("big_kahuna_burger",[Var("x")]);Cut;Fail]);
+let p5 = [Rule(Atom("enjoys",[Node("v",[]);Var("x")]),[Atom("big_kahuna_burger",[Var("x")]);Cut;Fail]);
 		Rule(Atom("enjoys",[Node("v",[]);Var("x")]),[Atom("burger",[Var("x")])]);
 		Rule(Atom("burger",[Var("x")]),[Atom("big_mac",[Var("x")])]);
 		Rule(Atom("burger",[Var("x")]),[Atom("big_kahuna_burger",[Var("x")])]);
