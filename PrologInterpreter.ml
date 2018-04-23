@@ -1,6 +1,7 @@
 exception Error
 exception NOT_UNIFIABLE
 exception False
+exception True
 
 type term = Var of string | Node of string*(term list)	(* a constant is a zero-ary function symbol *)
 
@@ -144,7 +145,12 @@ let rec removeVarsNotInGoalUnif varsGoal unifier = match unifier with
 	| [] -> []
 	| (a,b)::u1 -> if (listContains varsGoal a) then (a,b)::(removeVarsNotInGoalUnif varsGoal u1) else (removeVarsNotInGoalUnif varsGoal u1)
 
-let rec removeVarsNotInGoal varsGoal unifierList = List.map (removeVarsNotInGoalUnif varsGoal) unifierList
+let rec removeVarsNotInGoal varsGoal unifierList = match unifierList with
+	| [] -> []
+	| u::us -> (match (removeVarsNotInGoalUnif varsGoal u) with
+		| [] -> removeVarsNotInGoal varsGoal us
+		| _ -> (removeVarsNotInGoalUnif varsGoal u)::(removeVarsNotInGoal varsGoal us)
+		)
 
 (* remove vars removes extra variables not in the original goal but may have been created internally in the eval function (see eval_wrapper p g3;;)  *)
 
@@ -153,35 +159,35 @@ let rec popStackTillCutmarker s = match s with
 	| (_,_,CutMarker)::s1 -> s1
 	| s0::s1 -> popStackTillCutmarker s1
 
-let rec eval originalProg stack = match stack with
-	| [] -> []
+let rec eval originalProg stack flag= match stack with
+	| [] -> if flag then [] else raise False
 	| (currentUnif,prog,goal)::s1 -> (match goal with
 		
-		| Goal [] -> [currentUnif]@(eval originalProg s1)
+		| Goal [] -> [currentUnif]@(eval originalProg s1 true)
 
-		| CutMarker -> [currentUnif]@(eval originalProg s1)
+		| CutMarker -> [currentUnif]@(eval originalProg s1 flag)
 
-		| Goal (Cut::xs) -> eval originalProg ((currentUnif,prog,Goal(xs))::(popStackTillCutmarker s1))
+		| Goal (Cut::xs) -> eval originalProg ((currentUnif,prog,Goal(xs))::(popStackTillCutmarker s1)) flag
 
 		| Goal (Fail::xs) -> raise NOT_UNIFIABLE
 
 		| Goal (x::xs) -> (let substituted_atomic_goal = subst_atom currentUnif x in
 				(match prog with
-				| [] -> (eval originalProg s1)
+				| [] -> (eval originalProg s1 flag)
 				| (Fact f)::p1 -> (let substituted_fact = subst_atom currentUnif f in
-					try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal xs))::(currentUnif,p1,goal)::s1))
-					with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
+					try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal xs))::(currentUnif,p1,goal)::s1) flag)
+					with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) flag))
 				| (Rule (r,l))::p1 -> if (listContains l Cut) then
 
 						(let substituted_fact = subst_atom currentUnif r in
-						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::([],[],CutMarker)::s1))
-						with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
+						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::([],[],CutMarker)::s1) flag)
+						with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) flag))
 
 					else
 
 						(let substituted_fact = subst_atom currentUnif r in
-						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::s1))
-						with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) ))
+						try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (l@xs)))::(currentUnif,p1,goal)::s1) flag)
+						with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) flag))
 
 				)
 			)
@@ -196,16 +202,29 @@ let rec eval originalProg stack = match stack with
 
 (* eval takes a program and a goal and gives the solutiona to the goal *)
 
-let eval_wrapper program goal = removeVarsNotInGoal (vars_goal goal) (eval program [([],program,goal)])
+let eval_wrapper program goal = (let a = removeVarsNotInGoal (vars_goal goal) (eval program [([],program,goal)] false) in 
+	( match a with
+		| [] -> raise True
+		| _ -> a
+	)
+)
 
 (* eval_wrapper is a wrapper for the eval function *)
 
 (* expressions, failure of original goal, remove mapping of variables not in original goal, true for original goal *)
+(* same variables, looping recursion *)
 ;;
 
 
 (* graph example *)
-let p = [Fact(Atom("edge",[Node("a",[]);Node("b",[])])); Fact(Atom("edge",[Node("a",[]);Node("c",[])])); Fact(Atom("path",[Var ("x"); Var("x")])); Rule(Atom("path",[Var ("x"); Var("y")]),[Atom("edge",[Var("x"); Var("y")])])];;
+let p1 = [Fact(Atom("edge",[Node("a",[]);Node("b",[])])); Fact(Atom("edge",[Node("a",[]);Node("c",[])])); 
+		Fact(Atom("path",[Var ("t"); Var("t")])); 
+		Rule(Atom("path",[Var ("x"); Var("y")]),[Atom("path",[Var("x"); Var("z")]);Atom("edge",[Var("z"); Var("y")])])
+		];;
+let p2 = [Fact(Atom("edge",[Node("a",[]);Node("b",[])])); Fact(Atom("edge",[Node("a",[]);Node("c",[])])); 
+		Fact(Atom("path",[Var ("t"); Var("t")])); 
+		Rule(Atom("path",[Var ("x"); Var("y")]),[Atom("edge",[Var("x"); Var("z")]);Atom("path",[Var("z"); Var("y")])])
+		];;
 let g1 = Goal [Atom("edge",[Node("a",[]); Var("x")])];;
 let g2 = Goal [Atom("path",[Node("b",[]); Var("x")])];;
 let g3 = Goal [Atom("path",[Node("a",[]); Node("b",[])])];;
@@ -226,7 +245,7 @@ j(1).
 j(2).
 j(3).
  *)
-let p1 = [Rule(Atom("s",[Var("x");Var("y")]),[Atom("q",[Var("x");Var("y")])]);
+let p3 = [Rule(Atom("s",[Var("x");Var("y")]),[Atom("q",[Var("x");Var("y")])]);
 		Fact(Atom("s",[Node("0",[]);Node("0",[])]));
 		Rule(Atom("q",[Var("x");Var("y")]),[Atom("i",[Var("x")]);Cut;Atom("j",[Var("y")])]);
 		Fact(Atom("i",[Node("1",[])]));
@@ -235,7 +254,7 @@ let p1 = [Rule(Atom("s",[Var("x");Var("y")]),[Atom("q",[Var("x");Var("y")])]);
 		Fact(Atom("j",[Node("2",[])]));
 		Fact(Atom("j",[Node("3",[])]))
 		];;
-let p2 = [Rule(Atom("s",[Var("x");Var("y")]),[Atom("q",[Var("x");Var("y")])]);
+let p4 = [Rule(Atom("s",[Var("x");Var("y")]),[Atom("q",[Var("x");Var("y")])]);
 		Fact(Atom("s",[Node("0",[]);Node("0",[])]));
 		Rule(Atom("q",[Var("x");Var("y")]),[Atom("i",[Var("x")]);Atom("j",[Var("y")])]);
 		Fact(Atom("i",[Node("1",[])]));
@@ -244,7 +263,7 @@ let p2 = [Rule(Atom("s",[Var("x");Var("y")]),[Atom("q",[Var("x");Var("y")])]);
 		Fact(Atom("j",[Node("2",[])]));
 		Fact(Atom("j",[Node("3",[])]))
 		];;
-let g1 = Goal [Atom("s",[Var("x");Var("y")])];;
+let g6 = Goal [Atom("s",[Var("x");Var("y")])];;
 
 (* forced fail example *)
 (* 
@@ -269,7 +288,10 @@ let p3 = [Rule(Atom("enjoys",[Node("v",[]);Var("x")]),[Atom("big_kahuna_burger",
 		Fact(Atom("big_mac",[Node("a",[])]));
 		Fact(Atom("big_mac",[Node("c",[])]));
 		Fact(Atom("big_kahuna_burger",[Node("c",[])]))
-		]
+		];;
 
 let g6 = Goal [Atom("enjoys",[Node("v",[]);Node("a",[])])];;
 let g7 = Goal [Atom("enjoys",[Node("v",[]);Node("b",[])])];;
+
+
+eval_wrapper p2 g5;;
