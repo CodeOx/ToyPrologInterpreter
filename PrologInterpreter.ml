@@ -146,10 +146,16 @@ let rec subst_atom_fact_getSubstitution unifier vars_fact i= match vars_fact wit
 	| [] -> []
 	| x::xs -> if (pairListContains unifier x) then 
 		(let a = Var("variable" ^ (string_of_int i)) in 
-			if (pairListContains unifier a) then subst_atom_fact_getSubstitution unifier vars_fact (i+1) else
+			if ((pairListContains unifier a) || (listContains vars_fact a)) then subst_atom_fact_getSubstitution unifier vars_fact (i+1) else
 			(x,a)::(subst_atom_fact_getSubstitution unifier xs (i+1))
 		)
 	else (subst_atom_fact_getSubstitution unifier xs i)
+
+(* subst_atom_fact takes a fact and replaces its variables to variables not in unifier *)
+
+let rec subst_goalList unifier goalList= match goalList with
+	| [] -> []
+	| x::xs -> (subst_atom (subst_atom_fact_getSubstitution unifier (vars_atom x) 1000) x)::(subst_goalList unifier xs)
 
 (* subst_atom_fact takes a fact and replaces its variables to variables not in unifier *)
 
@@ -193,18 +199,22 @@ let rec eval originalProg stack flag= match stack with
 
 					(if (listContains l Cut) then
 
-						(let substituted_fact = subst_atom currentUnif r in
-							let subst_l = List.map (subst_atom s) l in
+						(let substituted_fact = subst_atom s r in
+							(let subst_l = List.map (subst_atom s) l in
 								try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (subst_l@xs)))::(currentUnif,p1,goal)::([],[],CutMarker)::s1) flag)
 								with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) flag)
+							)
 						)
 
 					else
 
 						(let substituted_fact = subst_atom s r in 
-							let subst_l = List.map (subst_atom s) l in
-								try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (subst_l@xs)))::(currentUnif,p1,goal)::s1) flag)
-								with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) flag)
+							(let subst_l1 = List.map (subst_atom s) l in
+								(let subst_l = subst_goalList currentUnif subst_l1 in
+									try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (subst_l@xs)))::(currentUnif,p1,goal)::s1) flag)
+									with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) flag)
+								)
+							)
 						)
 					)
 				)
@@ -249,6 +259,15 @@ let g3 = Goal [Atom("path",[Node("a",[]); Node("b",[])])];;
 let g4 = Goal [Atom("edge",[Var("x"); Var("y")])];;
 let g5 = Goal [Atom("path",[Var("x");Var("y")])];;
 
+let p6 = [Fact(Atom("edge",[Node("a",[]);Node("b",[])])); Fact(Atom("edge",[Node("b",[]);Node("c",[])])); 
+		Fact(Atom("path",[Var ("x"); Var("x")])); 
+		Rule(Atom("path",[Var ("x"); Var("y")]),[Atom("edge",[Var("x"); Var("z")]);Atom("path",[Var("z"); Var("y")])])
+		];;
+
+let g9 = Goal [Atom("path",[Node("a",[]); Node("c",[])])];;
+let g10 = Goal [Atom("path",[Var("x");Var("y")])];;
+
+(* subst_atom (mgu_atoms (Atom("path",[Var("x");Var("y")])) (Atom("path",[Node("a",[]); Node("c",[])]))) (Atom("edge",[Var("x"); Var("z")]));; *)
 
 (* cut example *)
 (* 
@@ -313,3 +332,4 @@ let g7 = Goal [Atom("enjoys",[Node("v",[]);Node("b",[])])];;
 
 
 eval_wrapper p2 g5;;
+eval_wrapper p6 g10;;
