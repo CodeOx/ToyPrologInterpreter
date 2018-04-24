@@ -200,9 +200,11 @@ let rec eval originalProg stack flag= match stack with
 					(if (listContains l Cut) then
 
 						(let substituted_fact = subst_atom s r in
-							(let subst_l = List.map (subst_atom s) l in
-								try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (subst_l@xs)))::(currentUnif,p1,goal)::([],[],CutMarker)::s1) flag)
-								with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) flag)
+							(let subst_l1 = List.map (subst_atom s) l in
+								(let subst_l = subst_goalList currentUnif subst_l1 in
+									try (eval originalProg (( (composePair currentUnif (mgu_atoms substituted_fact substituted_atomic_goal)) , originalProg , (Goal (subst_l@xs)))::(currentUnif,p1,goal)::([],[],CutMarker)::s1) flag)
+									with NOT_UNIFIABLE -> (eval originalProg ((currentUnif,p1,goal)::s1) flag)
+								)
 							)
 						)
 
