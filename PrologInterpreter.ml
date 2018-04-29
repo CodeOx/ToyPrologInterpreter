@@ -1,4 +1,7 @@
 exception Error
+exception Error1
+exception Error2
+exception Error3
 exception NOT_UNIFIABLE
 exception False
 exception True
@@ -45,7 +48,7 @@ let rec union l1 l2 = match l1 with
 let rec getTerm l a = match l with
 	| [] -> a
 	| (Var x,b)::xs -> if ((Var x) = a) then b else getTerm xs a
-	| _ -> raise Error
+	| _ -> raise Error1
 
 (* getTerm takes a substitution and a variable and gives the term that the variable maps to in the substitution *)					 
 
@@ -61,15 +64,15 @@ let rec vars_atom atom = match atom with
 	| Atom (a,b) -> let c = (List.map (vars []) b) in (
 		List.fold_left union [] c
 	)
-	| _ -> raise Error
-
+	| Cut -> []
+	| Fail -> []
 (* vars_atom gives the set of varialbes in an Atom *)
 
 let rec vars_goal goal = match goal with
 	| Goal a ->	let c = (List.map (vars_atom) a) in (
 		List.fold_left union [] c
 	)
-	| _ -> raise Error
+	| _ -> raise Error3
 
 (* substitutions are represented as list of pairs of variables and terms, representing the mapping of the variable to the corresponding term *)
 (* composition of substitutions are represented as list of substitutions with first element of list (first substitution) applied first *)
@@ -332,6 +335,3 @@ let p5 = [Rule(Atom("enjoys",[Node("v",[]);Var("x")]),[Atom("big_kahuna_burger",
 let g6 = Goal [Atom("enjoys",[Node("v",[]);Node("a",[])])];;
 let g7 = Goal [Atom("enjoys",[Node("v",[]);Node("b",[])])];;
 
-
-eval_wrapper p2 g5;;
-eval_wrapper p6 g10;;
